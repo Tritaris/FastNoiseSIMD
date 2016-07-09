@@ -63,15 +63,22 @@
 #define SIMD_LEVEL_CLASS FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(SIMD_LEVEL)
 
 // Typedefs
-#if SIMD_LEVEL == FN_AVX2
+#if SIMD_LEVEL >= FN_AVX
 #define VECTOR_SIZE 8
 #define MEMORY_ALIGNMENT 32
 typedef __m256 SIMDf;
-typedef __m256i SIMDi;
 #define SIMDf_SET(a) _mm256_set1_ps(a)
 #define SIMDf_SET_ZERO() _mm256_setzero_ps()
+
+#if SIMD_LEVEL == FN_AVX2
+typedef __m256i SIMDi;
 #define SIMDi_SET(a) _mm256_set1_epi32(a)
 #define SIMDi_SET_ZERO() _mm256_setzero_si256()
+#else
+typedef struct { __m128i lo; __m128i hi; } SIMDi;
+#define SIMDi_SET(a) {_mm_set1_epi32(a), _mm_set1_epi32(a)}
+#define SIMDi_SET_ZERO() {_mm_setzero_si128(), _mm_setzero_si128()}
+#endif
 
 #elif SIMD_LEVEL >= FN_SSE2
 #define VECTOR_SIZE 4
@@ -121,7 +128,7 @@ static SIMDi SIMDi_NUM(0xffffffff);
 static SIMDf SIMDf_NUM(1);
 
 // SIMD functions
-#if SIMD_LEVEL >= FN_AVX2
+#if SIMD_LEVEL >= FN_AVX
 
 #ifdef FN_ALIGNED_SETS
 #define SIMDf_STORE(p,a) _mm256_store_ps(p,a)
@@ -153,6 +160,7 @@ static SIMDf SIMDf_NUM(1);
 #define SIMDf_BLENDV(a,b,mask) _mm256_blendv_ps(a,b,mask)
 #define SIMDf_GATHER(p,a) _mm256_i32gather_ps(p,a,4)
 
+#if SIMD_LEVEL == FN_AVX2
 #define SIMDi_ADD(a,b) _mm256_add_epi32(a,b)
 #define SIMDi_SUB(a,b) _mm256_sub_epi32(a,b)
 #define SIMDi_MUL(a,b) _mm256_mullo_epi32(a,b)
@@ -161,7 +169,6 @@ static SIMDf SIMDf_NUM(1);
 #define SIMDi_AND_NOT(a,b) _mm256_andnot_si256(a,b)
 #define SIMDi_OR(a,b) _mm256_or_si256(a,b)
 #define SIMDi_XOR(a,b) _mm256_xor_si256(a,b)
-#define SIMDi_NOT(a) SIMDi_XOR(a,SIMDi_NUM(0xffffffff))
 
 #define SIMDi_SHIFT_R(a, b) _mm256_srai_epi32(a, b)
 #define SIMDi_SHIFT_L(a, b) _mm256_slli_epi32(a, b)
@@ -174,6 +181,81 @@ static SIMDf SIMDf_NUM(1);
 #define SIMDf_CAST_TO_FLOAT(a) _mm256_castsi256_ps(a)
 #define SIMDi_CONVERT_TO_INT(a) _mm256_cvtps_epi32(a)
 #define SIMDi_CAST_TO_INT(a) _mm256_castps_si256(a)
+
+#else // AVX
+static SIMDi FUNC(AVXi_ADD)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_add_epi32(a.lo,b.lo), _mm_add_epi32(a.hi,b.hi) };
+}
+#define SIMDi_ADD(a,b) FUNC(AVXi_ADD)(a,b)
+static SIMDi FUNC(AVXi_SUB)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_sub_epi32(a.lo,b.lo), _mm_sub_epi32(a.hi,b.hi) };
+}
+#define SIMDi_SUB(a,b) FUNC(AVXi_SUB)(a,b)
+static SIMDi FUNC(AVXi_MUL)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_mullo_epi32(a.lo,b.lo), _mm_mullo_epi32(a.hi,b.hi) };
+}
+#define SIMDi_MUL(a,b) FUNC(AVXi_MUL)(a,b)
+
+static SIMDi FUNC(AVXi_AND)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_and_si128(a.lo,b.lo), _mm_and_si128(a.hi,b.hi) };
+}
+#define SIMDi_AND(a,b) FUNC(AVXi_AND)(a,b)
+static SIMDi FUNC(AVXi_AND_NOT)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_andnot_si128(a.lo,b.lo), _mm_andnot_si128(a.hi,b.hi) };
+}
+#define SIMDi_AND_NOT(a,b) FUNC(AVXi_AND_NOT)(a,b)
+static SIMDi FUNC(AVXi_OR)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_or_si128(a.lo,b.lo), _mm_or_si128(a.hi,b.hi) };
+}
+#define SIMDi_OR(a,b) FUNC(AVXi_OR)(a,b)
+static SIMDi FUNC(AVXi_XOR)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_xor_si128(a.lo,b.lo), _mm_xor_si128(a.hi,b.hi) };
+}
+#define SIMDi_XOR(a,b) FUNC(AVXi_XOR)(a,b)
+
+static SIMDi FUNC(AVXi_SHIFT_R)(const SIMDi& a, int b)
+{
+	return{ _mm_srai_epi32(a.lo,b), _mm_srai_epi32(a.hi,b) };
+}
+#define SIMDi_SHIFT_R(a, b) FUNC(AVXi_SHIFT_R)(a,b)
+static SIMDi FUNC(AVXi_SHIFT_L)(const SIMDi& a, int b)
+{
+	return{ _mm_slli_epi32(a.lo,b), _mm_slli_epi32(a.hi,b) };
+}
+#define SIMDi_SHIFT_L(a, b) FUNC(AVXi_SHIFT_L)(a,b)
+
+static SIMDi FUNC(AVXi_EQUAL)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_cmpeq_epi32(a.lo,b.lo), _mm_cmpeq_epi32(a.hi,b.hi) };
+}
+#define SIMDi_EQUAL(a,b) FUNC(AVXi_EQUAL)(a,b)
+static SIMDi FUNC(AVXi_GREATER_THAN)(const SIMDi& a, const SIMDi& b)
+{
+	return{ _mm_cmpgt_epi32(a.lo,b.lo), _mm_cmpgt_epi32(a.hi,b.hi) };
+}
+#define SIMDi_GREATER_THAN(a,b) FUNC(AVXi_GREATER_THAN)(a,b)
+#define SIMDi_LESS_THAN(a,b) FUNC(AVXi_GREATER_THAN)(b,a)
+
+#define SIMDf_CONVERT_TO_FLOAT(a) _mm256_cvtepi32_ps(_mm256_set_m128i(a.hi,a.lo))
+#define SIMDf_CAST_TO_FLOAT(a) _mm256_castsi256_ps(_mm256_set_m128i(a.hi,a.lo))
+
+static SIMDi FUNC(AVXi_CONVERT_TO_INT)(const SIMDf& a)
+{
+	__m256i m256 = _mm256_cvtps_epi32(a);
+	return{ _mm256_castsi256_si128(m256), _mm256_extractf128_si256(m256, 1) };
+}
+#define SIMDi_CONVERT_TO_INT(a) FUNC(AVXi_CONVERT_TO_INT)(a)
+#define SIMDi_CAST_TO_INT(a) {_mm_castps_si128(_mm256_castps256_ps128(a)),_mm_castps_si128(_mm256_extractf128_ps(a, 1))}
+#endif
+
+#define SIMDi_NOT(a) SIMDi_XOR(a,SIMDi_NUM(0xffffffff))
 
 #elif SIMD_LEVEL >= FN_SSE2
 
@@ -335,7 +417,7 @@ static float FUNC(INV_SQRT)(float x)
 #define SIMDf_ABS(a) SIMDf_AND(a,SIMDf_CAST_TO_FLOAT(SIMDi_NUM(0x7fffffff)))
 #endif
 
-#if SIMD_LEVEL == FN_AVX2
+#if SIMD_LEVEL >= FN_AVX
 #define SIMD_ZERO_ALL() _mm256_zeroall()
 #else
 #define SIMD_ZERO_ALL()
@@ -878,13 +960,13 @@ float* SIMD_LEVEL_CLASS::GetEmptySet(int size)
 	return noiseSet;
 }
 
-#if defined(FN_MIN_Z_4) || !defined(FN_COMPILE_AVX2)
+#if defined(FN_MIN_Z_4) || !(defined(FN_COMPILE_AVX2) || defined(FN_COMPILE_AVX))
 #define Z_SIZE_ASSERT(_zSize) assert(_zSize >= 4)
 #else
 #define Z_SIZE_ASSERT(_zSize) assert(_zSize >= 8)
 #endif
 
-#if SIMD_LEVEL == FN_AVX2 && defined(FN_MIN_Z_4)
+#if SIMD_LEVEL >= FN_AVX && defined(FN_MIN_Z_4)
 #define AVX_DOUBLE_RESET {\
 SIMDi _zReset = SIMDi_GREATER_THAN(z, zEndV); \
 y = SIMDi_ADD(y, SIMDi_AND(SIMDi_NUM(1), _zReset)); \
@@ -1223,18 +1305,18 @@ void SIMD_LEVEL_CLASS::Fill##func##FractalSet(float* noiseSet, FastNoiseVectorSe
 	SIMD_ZERO_ALL();\
 }
 
-	FILL_VECTOR_SET(Value)
-	FILL_FRACTAL_VECTOR_SET(Value)
+FILL_VECTOR_SET(Value)
+FILL_FRACTAL_VECTOR_SET(Value)
 
-	FILL_VECTOR_SET(Gradient)
-	FILL_FRACTAL_VECTOR_SET(Gradient)
+FILL_VECTOR_SET(Gradient)
+FILL_FRACTAL_VECTOR_SET(Gradient)
 
-	FILL_VECTOR_SET(Simplex)
-	FILL_FRACTAL_VECTOR_SET(Simplex)
+FILL_VECTOR_SET(Simplex)
+FILL_FRACTAL_VECTOR_SET(Simplex)
 
-	FILL_VECTOR_SET(WhiteNoise)
+FILL_VECTOR_SET(WhiteNoise)
 
-	void SIMD_LEVEL_CLASS::FillWhiteNoiseSet(float* noiseSet, int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
+void SIMD_LEVEL_CLASS::FillWhiteNoiseSet(float* noiseSet, int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
 {
 	assert(noiseSet);
 	Z_SIZE_ASSERT(zSize);
@@ -1328,6 +1410,7 @@ case Natural:\
 	break;\
 }
 
+#if SIMD_LEVEL != FN_AVX || !defined(FN_COMPILE_SSE41)
 void SIMD_LEVEL_CLASS::FillCellularSet(float* noiseSet, int xStart, int yStart, int zStart, int xSize, int ySize, int zSize, float scaleModifier)
 {
 	assert(noiseSet);
@@ -1424,6 +1507,7 @@ void SIMD_LEVEL_CLASS::FillCellularSet(float* noiseSet, FastNoiseVectorSet* vect
 	}
 	SIMD_ZERO_ALL();
 }
+#endif
 
 #define SAMPLE_INDEX(_x,_y,_z) ((_x) * yzSizeSample + (_y) * zSizeSample + (_z))
 #define SET_INDEX(_x,_y,_z) ((_x) * yzSize + (_y) * zSize + (_z))

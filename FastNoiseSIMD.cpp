@@ -44,6 +44,11 @@
 #include "FastNoiseSIMD_internal.h"
 #endif
 
+#ifdef FN_COMPILE_AVX
+#define SIMD_LEVEL_H FN_AVX
+#include "FastNoiseSIMD_internal.h"
+#endif
+
 #ifdef FN_COMPILE_AVX2
 #define SIMD_LEVEL_H FN_AVX2
 #include "FastNoiseSIMD_internal.h"
@@ -116,7 +121,7 @@ int GetFastestSIMD()
 
 	// AVX2 FMA3
 	if (nIds < 0x00000007)
-		return FN_SSE41;
+		return FN_AVX;
 
 	bool cpuFMA3Support = (cpuInfo[2] & 1 << 12) != 0;
 
@@ -127,7 +132,7 @@ int GetFastestSIMD()
 	if (cpuFMA3Support && cpuAVX2Support)
 		return FN_AVX2;
 	else
-		return FN_SSE41;
+		return FN_AVX;
 }
 
 
@@ -138,6 +143,11 @@ FastNoiseSIMD* FastNoiseSIMD::NewFastNoiseSIMD(int seed)
 #ifdef FN_COMPILE_AVX2
 	if (s_currentSIMDLevel >= FN_AVX2)
 		return new FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_AVX2)(seed);
+#endif
+
+#ifdef FN_COMPILE_AVX
+	if (s_currentSIMDLevel >= FN_AVX)
+		return new FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_AVX)(seed);
 #endif
 
 #ifdef FN_COMPILE_SSE41
@@ -187,7 +197,7 @@ int FastNoiseSIMD::AlignedSize(int size)
 	GetSIMDLevel();
 
 #ifdef FN_COMPILE_AVX2
-	if (s_currentSIMDLevel >= FN_AVX2)
+	if (s_currentSIMDLevel >= FN_AVX)
 		return FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_AVX2)::AlignedSize(size);
 #endif
 
@@ -205,7 +215,7 @@ float* FastNoiseSIMD::GetEmptySet(int size)
 	GetSIMDLevel();
 
 #ifdef FN_COMPILE_AVX2
-	if (s_currentSIMDLevel >= FN_AVX2)
+	if (s_currentSIMDLevel >= FN_AVX)
 		return FastNoiseSIMD_internal::FASTNOISE_SIMD_CLASS(FN_AVX2)::GetEmptySet(size);
 #endif
 

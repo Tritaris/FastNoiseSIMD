@@ -35,6 +35,7 @@
 #define FN_COMPILE_SSE41
 
 // To compile AVX2 set C++ code generation to use /arch:AVX(2) on FastNoiseSIMD_avx2.cpp
+#define FN_COMPILE_AVX
 #define FN_COMPILE_AVX2
 // Note: This does not break support for pre AVX CPUs, AVX code is only run if support is detected
 
@@ -252,5 +253,6 @@ struct FastNoiseVectorSet
 #define FN_NO_SIMD_FALLBACK 0
 #define FN_SSE2 1
 #define FN_SSE41 2
-#define FN_AVX2 3
+#define FN_AVX 3
+#define FN_AVX2 4
 #endif
